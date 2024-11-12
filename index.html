@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Local Object Detection with TensorFlow.js</title>
+    <style>
+      #results {
+        position: fixed;
+        top: 50px;
+        left: 10px;
+        color: white;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 10px;
+        border-radius: 5px;
+        max-width: 300px;
+        overflow-y: auto;
+        max-height: 80vh;
+      }
+
+      #results div {
+        margin-bottom: 10px;
+      }
+
+      video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      h1 {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        color: white;
+        background: rgba(0, 0, 0, 0.5);
+        margin: 0;
+        padding: 10px;
+        width: 100%;
+        text-align: center;
+      }
+
+      button {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+        background-color: #007BFF;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        z-index: 1;
+      }
+
+      button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Local Object Detection with TensorFlow.js -->
+
+    <video autoplay="true" id="videoElement"></video>
+    <button id="vision_button" disabled>Analyze</button>
+    <div id="results"></div>
+    <h1>Local Object Detection with TensorFlow.js</h1>
+
+    <!-- Load TensorFlow.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+    <!-- Load the COCO-SSD Model -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+    <script>
+      let model;
+
+      // Initialize TensorFlow.js and load the model
+      async function loadModel() {
+        try {
+          // Display loading status
+          const resultsDiv = document.getElementById('results');
+          resultsDiv.innerHTML = 'Loading model... Please wait.';
+          
+          // Load the COCO-SSD model
+          model = await cocoSsd.load();
+          console.log('Model loaded.');
+          
+          // Update UI to enable the button
+          resultsDiv.innerHTML = 'Model loaded. Click "Analyze" to detect objects.';
+          document.getElementById('vision_button').disabled = false;
+        } catch (error) {
+          console.error('Error loading model:', error);
+          const resultsDiv = document.getElementById('results');
+          resultsDiv.innerHTML = 'Failed to load model.';
+        }
+      }
+
+      loadModel();
+
+      // Access camera 
+      const video = document.querySelector("#videoElement");      
+      if (navigator.mediaDevices.getUserMedia) {       
+        navigator.mediaDevices.getUserMedia({video: true})
+          .then(function(stream) {
+            video.srcObject = stream;
+          })
+          .catch(function(err) {
+            console.error("Something went wrong accessing the camera!", err);
+          });
+      }
+
+      // Handle Analyze button click
+      document.querySelector("#vision_button").addEventListener('click', async () => {
+        if (!model) {
+          alert('Model not loaded yet. Please wait.');
+          return;
+        }
+
+        // Disable the button to prevent multiple clicks
+        const button = document.getElementById('vision_button');
+        button.disabled = true;
+        button.innerText = 'Analyzing...';
+
+        // Create a canvas to capture the current video frame
+        const scale = 0.5; // Adjust scale as needed
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth * scale;
+        canvas.height = video.videoHeight * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Convert canvas to tensor
+        const image = tf.browser.fromPixels(canvas);
+
+        try {
+          // Perform object detection
+          const predictions = await model.detect(image);
+          console.log(predictions);
+
+          // Clear previous results
+          const resultsDiv = document.getElementById('results');
+          resultsDiv.innerHTML = '';
+
+          if (predictions.length === 0) {
+            resultsDiv.innerHTML = 'No objects detected.';
+          } else {
+            // Display detected objects
+            predictions.forEach(prediction => {
+              const { class: className, score } = prediction;
+              
+              // Create elements to display class name and score
+              const description = document.createElement('span');
+              description.innerText = `${className}`;
+              description.style.fontWeight = 'bold';
+              
+              const scoreSpan = document.createElement('span');
+              scoreSpan.innerText = ` (${(score * 100).toFixed(2)}%)`;
+              scoreSpan.style.color = '#00FF00';
+              
+              const div = document.createElement('div');
+              div.append(description, scoreSpan);
+              
+              resultsDiv.appendChild(div);
+            });
+          }
+        } catch (error) {
+          console.error('Error during detection:', error);
+          const resultsDiv = document.getElementById('results');
+          resultsDiv.innerHTML = 'Error during detection.';
+        } finally {
+          // Clean up tensor
+          image.dispose();
+
+          // Re-enable the button
+          button.disabled = false;
+          button.innerText = 'Analyze';
+        }
+      });
+    </script>
+  </body>
+</html>
